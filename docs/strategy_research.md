@@ -335,8 +335,8 @@ VR > 0.80; any TREND or SHOCK regime; `z` got to ≤ −2.25 in a single bar wit
 
 | Regime | SWEEP (A) | PULLBACK (B) | CASCADE (C) | STATREV (D) | Sizing |
 |---|---|---|---|---|---|
-| TREND_UP | Longs only (sweeps of support); shorts disabled | **Longs active** | Longs & shorts if triggered | Off | 1.0× |
-| TREND_DOWN | Shorts only | **Shorts active** | Both | Off | 1.0× |
+| TREND_UP | Off in the baseline; tested variant: longs only (sweeps of support) | **Longs active** | Longs & shorts if triggered | Off | 1.0× |
+| TREND_DOWN | Off in the baseline; tested variant: shorts only | **Shorts active** | Both | Off | 1.0× |
 | RANGE | **Both sides active** | Off | Both | **Active** | 1.0× |
 | TRANSITION | Both, but room filter raised to 2.5R | Off | Both | Off | 0.5× |
 | SHOCK | Off | Off; open runners are closed | **Only strategy active** | Off | 0.5× (wider stops, same R-risk) |
