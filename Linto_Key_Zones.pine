@@ -14,6 +14,8 @@
 //   4. Broken: after the zone's newest pivot, a candle closed above it AND a candle
 //      closed below it (price went through). Broken zones are hidden. A new pivot in
 //      the zone rebuilds it.
+//   Display: 1H zones = plain light fill (no border); 15M zones = dashed outline. Zones stop
+//   a set number of candles right of price.
 //   5. Select: nearest 2 above + 2 below price in total. 15M zones that overlap a
 //      1H zone are dropped (1H has priority).
 // Non-repainting: all timeframe data is taken from closed bars only
@@ -46,10 +48,10 @@ srcMode = input.string("High/Low", "Pivot source", options = ["High/Low", "Close
 
 gD = "Display"
 showPD  = input.bool(true, "PDH/PDL tag on labels (info only)", group = gD)
-showCal = input.bool(true, "Show calibration info", group = gD)
+showCal = input.bool(false, "Show calibration info", group = gD, tooltip = "Bottom-right text that checks zone widths. Not needed for trading.")
 colRes  = input.color(#f23645, "Zone above price", group = gD)
 colSup  = input.color(#089981, "Zone below price", group = gD)
-lblBars = input.int(10, "Label distance right of price (bars)", minval = 0, maxval = 100, group = gD)
+lblBars = input.int(20, "Zone length right of price (bars)", minval = 5, maxval = 100, group = gD, tooltip = "Zones stop this many candles to the right of the current candle; the label sits at the end.")
 
 gA = "Alert"
 useAlert = input.bool(true, "Alert when price enters a zone", group = gA, tooltip = "Create one alert on this indicator with 'Any alert() function call'.")
@@ -365,10 +367,12 @@ if barstate.islast
             bool  is1H = array.get(cL, k) == 60
             bool  isAbove = (t + b) / 2.0 >= close
             color col  = isAbove ? colRes : colSup
-            array.push(boxes, box.new(int(array.get(cS, k)), t, time, b, xloc = xloc.bar_time, extend = extend.right,
-                 border_color = col, border_width = is1H ? 2 : 1,
+            int   xEnd = time + lblBars * tfSec * 1000
+            // 1H: plain light fill, no border. 15M: dashed outline, no fill.
+            array.push(boxes, box.new(int(array.get(cS, k)), t, xEnd, b, xloc = xloc.bar_time, extend = extend.none,
+                 border_color = is1H ? color.new(col, 100) : col, border_width = 1,
                  border_style = is1H ? line.style_solid : line.style_dashed,
-                 bgcolor = is1H ? color.new(col, 80) : color.new(col, 100)))
+                 bgcolor = is1H ? color.new(col, 78) : color.new(col, 100)))
             string tf  = is1H ? "1H" : "15M"
             string txt = tf + " ×" + str.tostring(array.get(cC, k), "#")
             if showPD
@@ -376,9 +380,9 @@ if barstate.islast
                     txt += " · PDH"
                 if not na(pdl) and pdl <= t and pdl >= b
                     txt += " · PDL"
-            array.push(labels, label.new(time + lblBars * tfSec * 1000, (t + b) / 2.0, txt, xloc = xloc.bar_time,
+            array.push(labels, label.new(xEnd, (t + b) / 2.0, txt, xloc = xloc.bar_time,
                  style = label.style_label_left, color = color.new(color.black, 100), textcolor = col,
-                 size = is1H ? size.normal : size.small))
+                 size = is1H ? size.small : size.tiny))
             // zone entry: this bar touches the zone, the previous bar was fully outside it
             if high >= b and low <= t and (high[1] < b or low[1] > t)
                 entered += (entered == "" ? "" : ", ") + tf + " zone " + str.tostring(b, format.mintick) + "-" + str.tostring(t, format.mintick)
