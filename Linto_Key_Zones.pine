@@ -54,7 +54,8 @@ colRes  = input.color(#f23645, "Zone above price", group = gD)
 colSup  = input.color(#089981, "Zone below price", group = gD)
 lblBars = input.int(20, "Zone length right of price (bars)", minval = 5, maxval = 100, group = gD, tooltip = "Zones stop this many candles to the right of the current candle; the label sits at the end.")
 exStyle = input.string("Light outline", "Zone style on 1M-5M charts", options = ["Light outline", "Edge line only"], group = gD, tooltip = "Light outline = thin border with a faint fill. Edge line only = one line at the zone edge facing price.")
-exBack  = input.int(60, "Zone length left on 1M-5M charts (bars)", minval = 10, maxval = 1000, group = gD, tooltip = "On 1M-5M charts zones start this many candles back instead of at the oldest pivot. 60 = one hour on the 1M chart.")
+exBack  = input.int(120, "Zone length left on 1M-5M charts (bars)", minval = 10, maxval = 1000, group = gD, tooltip = "On 1M-5M charts zones start this many candles back instead of at the oldest pivot. 120 = two hours on the 1M chart.")
+exNear  = input.float(2.0, "On 1M-5M, show zones within (x 1H ATR)", minval = 0.5, maxval = 20, step = 0.5, group = gD, tooltip = "Zones further from price than this are not drawn on 1M-5M charts, so they cannot squash the chart. They still show on 1H/15M. Tip: also right-click the price scale > Scale price chart only.")
 
 gA = "Alert"
 useAlert = input.bool(true, "Alert when price enters a zone", group = gA, tooltip = "Create one alert on this indicator with 'Any alert() function call'.")
@@ -376,35 +377,39 @@ if barstate.islast
             int   xEnd   = time + lblBars * tfSec * 1000
             int   xStart = int(array.get(cS, k))
             float yLbl   = (t + b) / 2.0
-            if not modeExec
-                // 1H/15M charts: 1H = plain light fill, no border. 15M = dashed outline, no fill.
-                array.push(boxes, box.new(xStart, t, xEnd, b, xloc = xloc.bar_time, extend = extend.none,
-                     border_color = is1H ? color.new(col, 100) : col, border_width = 1,
-                     border_style = is1H ? line.style_solid : line.style_dashed,
-                     bgcolor = is1H ? color.new(col, 78) : color.new(col, 100)))
-            else
-                // 1M-5M charts: shorter on the left, and lighter so candles stay readable
-                xStart := math.max(xStart, time - exBack * tfSec * 1000)
-                if exStyle == "Light outline"
-                    array.push(boxes, box.new(xStart, t, xEnd, b, xloc = xloc.bar_time, extend = extend.none,
-                         border_color = color.new(col, 30), border_width = 1,
-                         border_style = is1H ? line.style_solid : line.style_dashed,
-                         bgcolor = color.new(col, is1H ? 92 : 100)))
-                else
-                    float edge = isAbove ? b : t   // the side price meets first
-                    yLbl := edge
-                    array.push(lines, line.new(xStart, edge, xEnd, edge, xloc = xloc.bar_time, extend = extend.none,
-                         color = col, width = is1H ? 2 : 1, style = is1H ? line.style_solid : line.style_dashed))
+            float dist = isAbove ? math.max(b - close, 0.0) : math.max(close - t, 0.0)
+            // 1M-5M: only draw zones within reach, so far zones cannot squash the chart
             string tf  = is1H ? "1H" : "15M"
-            string txt = tf + " ×" + str.tostring(array.get(cC, k), "#")
-            if showPD
-                if not na(pdh) and pdh <= t and pdh >= b
-                    txt += " · PDH"
-                if not na(pdl) and pdl <= t and pdl >= b
-                    txt += " · PDL"
-            array.push(labels, label.new(xEnd, yLbl, txt, xloc = xloc.bar_time,
-                 style = label.style_label_left, color = color.new(color.black, 100), textcolor = col,
-                 size = is1H ? size.small : size.tiny))
+            bool drawIt = not modeExec or na(hAtr) or dist <= exNear * hAtr
+            if drawIt
+                if not modeExec
+                    // 1H/15M charts: 1H = plain light fill, no border. 15M = dashed outline, no fill.
+                    array.push(boxes, box.new(xStart, t, xEnd, b, xloc = xloc.bar_time, extend = extend.none,
+                         border_color = is1H ? color.new(col, 100) : col, border_width = 1,
+                         border_style = is1H ? line.style_solid : line.style_dashed,
+                         bgcolor = is1H ? color.new(col, 78) : color.new(col, 100)))
+                else
+                    // 1M-5M charts: shorter on the left, and lighter so candles stay readable
+                    xStart := math.max(xStart, time - exBack * tfSec * 1000)
+                    if exStyle == "Light outline"
+                        array.push(boxes, box.new(xStart, t, xEnd, b, xloc = xloc.bar_time, extend = extend.none,
+                             border_color = color.new(col, 30), border_width = 1,
+                             border_style = is1H ? line.style_solid : line.style_dashed,
+                             bgcolor = color.new(col, is1H ? 92 : 100)))
+                    else
+                        float edge = isAbove ? b : t   // the side price meets first
+                        yLbl := edge
+                        array.push(lines, line.new(xStart, edge, xEnd, edge, xloc = xloc.bar_time, extend = extend.none,
+                             color = col, width = is1H ? 2 : 1, style = is1H ? line.style_solid : line.style_dashed))
+                string txt = tf + " ×" + str.tostring(array.get(cC, k), "#")
+                if showPD
+                    if not na(pdh) and pdh <= t and pdh >= b
+                        txt += " · PDH"
+                    if not na(pdl) and pdl <= t and pdl >= b
+                        txt += " · PDL"
+                array.push(labels, label.new(xEnd, yLbl, txt, xloc = xloc.bar_time,
+                     style = label.style_label_left, color = color.new(color.black, 100), textcolor = col,
+                     size = is1H ? size.small : size.tiny))
             // zone entry: this bar touches the zone, the previous bar was fully outside it
             if high >= b and low <= t and (high[1] < b or low[1] > t)
                 entered += (entered == "" ? "" : ", ") + tf + " zone " + str.tostring(b, format.mintick) + "-" + str.tostring(t, format.mintick)
