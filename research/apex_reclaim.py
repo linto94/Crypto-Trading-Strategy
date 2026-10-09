@@ -82,17 +82,17 @@ def simulate(df, nice, mids, shift, rr):
 
 
 if __name__ == "__main__":
-    DATA = sys.argv[1]; rows = []
+    DATA = sys.argv[1]; P = int(sys.argv[2]) if len(sys.argv) > 2 else 10; rows = []
     for tf in ("H4", "H1"):
         for nice, f in PAIRS:
             df = pd.read_csv(f"{DATA}/{f}_{tf}.csv", parse_dates=["Datetime"])
-            mids = zone_series(df)
+            mids = zone_series(df, P)
             for shift in (0.0, -3.0, -1.5, 1.5, 3.0):
                 for rr in (1.5, 2.0):
                     d = pd.DataFrame(simulate(df, nice, mids, shift, rr))
                     if len(d):
                         d["tf"] = tf; d["rr"] = rr; d["real"] = shift == 0.0; rows.append(d)
-    d = pd.concat(rows); d.to_csv("apex_reclaim_trades.csv", index=False)
+    d = pd.concat(rows); d.to_csv(f"apex_reclaim_trades_P{P}.csv", index=False)
     order = ["XAUUSD", "EURUSD", "GBPUSD", "GER40", "US500", "US100", "BTCUSD"]
     d["when"] = pd.to_datetime(d.when)
     for tf in ("H4", "H1"):
