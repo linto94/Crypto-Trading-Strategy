@@ -70,7 +70,7 @@ def build_zones(piv, width, min_str=2, max_zones=5):
     return [(cm[k], ch[k], cl[k]) for k in order[:max_zones]]
 
 
-def simulate(df, nice, P=10, entry_mode="mid", tp_n=1):
+def simulate(df, nice, P=10, entry_mode="mid", tp_n=1, sl_pct=0.15, rr=None):
     o, h, l, c = (df[k].values for k in ("Open", "High", "Low", "Close"))
     when = df.Datetime.values
     sp = df.Spread.values * POINT[nice]
@@ -113,6 +113,8 @@ def simulate(df, nice, P=10, entry_mode="mid", tp_n=1):
             if filled:
                 ent = min(o[t], lim) if side > 0 else max(o[t], lim)
                 risk = (ent - stop) * side
+                if rr is not None and risk > 0:
+                    tgt = ent + side * rr * risk
                 if risk > 0 and (tgt - ent) * side > 0:
                     cost = sp[t] / risk
                     if (l[t] <= stop) if side > 0 else (h[t] >= stop):
@@ -135,10 +137,10 @@ def simulate(df, nice, P=10, entry_mode="mid", tp_n=1):
         side = 1 if mid <= c[t] else -1
         far = sorted([z[0] for z in zones if z[0] > c[t]]) if side > 0 else sorted([z[0] for z in zones if z[0] <= c[t]], reverse=True)
         far = [m for m in far if (m - mid) * side > 0]
-        if not far:
+        if not far and rr is None:
             continue
-        tgt = far[min(tp_n, len(far)) - 1]
-        stop = zl * (1 - 0.0015) if side > 0 else zh * (1 + 0.0015)
+        tgt = far[min(tp_n, len(far)) - 1] if far else np.nan
+        stop = zl * (1 - sl_pct / 100) if side > 0 else zh * (1 + sl_pct / 100)
         lim = mid if entry_mode == "mid" else mid + side * 0.3 * atr[t]
         order = (side, lim, stop, tgt, mid)
     return trades, misses, (h, l)
