@@ -21,8 +21,8 @@
 //      1H zone are dropped (1H has priority).
 // Info panel (top right, information only): lists the zones above and below price with a
 //   coloured status - Not reached (distance) / Approaching / Touching now / Inside zone / Reached (time ago) -
-//   and marks the zone price CAME FROM (the last zone it left) and the zone it is HEADING TO
-//   (the nearest zone in that direction). Tracked on closed candles.
+//   and marks the zone price CAME FROM (the zone it touched most recently, even one that has
+//   broken since) and the zone it is HEADING TO (the nearest zone on the other side of price).
 // Non-repainting: all timeframe data is taken from closed bars only
 // (request.security with [1] + lookahead_on).
 //
