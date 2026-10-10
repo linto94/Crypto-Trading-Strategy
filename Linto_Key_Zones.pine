@@ -21,8 +21,8 @@
 //      1H zone are dropped (1H has priority).
 // Info panel (top right, information only): lists the zones above and below price with a
 //   coloured status - Not reached (distance) / Approaching / Touching now / Inside zone / Reached (time ago) -
-//   and marks the zone price CAME FROM (the last zone it left) and the zone it is HEADING TO
-//   (the nearest zone in that direction). Tracked on closed candles.
+//   and marks the zone price CAME FROM (the listed zone it touched most recently) and the zone it
+//   is HEADING TO (the nearest listed zone on the other side of price).
 // Non-repainting: all timeframe data is taken from closed bars only
 // (request.security with [1] + lookahead_on).
 //
@@ -316,7 +316,7 @@ bool use15    = mode15 or (modeExec and show15)
 
 
 //=============================================================================
-// ZONE CANDIDATES (every candle) + TOUCH TRACKING for the info panel
+// ZONE CANDIDATES
 //=============================================================================
 array<float> cT = array.new<float>()
 array<float> cB = array.new<float>()
@@ -351,45 +351,6 @@ if nC > 0
             for j = 0 to nC - 1
                 if array.get(cL, j) == 60 and array.get(cB, i) <= array.get(cT, j) and array.get(cT, i) >= array.get(cB, j)
                     array.set(skip, i, true)
-
-// which zone price touched last, and which zone it last LEFT (closed candles only)
-var float tchT = na          // zone being touched now
-var float tchB = na
-var int   tchL = 0
-var float fromT = na          // "came from" zone
-var float fromB = na
-var int   fromL = 0
-var int   fromTime = na
-var int   fromBar = na
-if barstate.isconfirmed and (use1H or use15) and nC > 0
-    int   fk = -1
-    float fd = 1e20
-    for k = 0 to nC - 1
-        if not array.get(skip, k) and high >= array.get(cB, k) and low <= array.get(cT, k)
-            float d = math.abs(close - (array.get(cT, k) + array.get(cB, k)) / 2.0)
-            if d < fd
-                fd := d
-                fk := k
-    if fk >= 0
-        float ft = array.get(cT, fk)
-        float fb = array.get(cB, fk)
-        bool same = not na(tchT) and fb <= tchT and ft >= tchB
-        if not same and not na(tchT)   // moved straight from one zone into the next
-            fromT := tchT
-            fromB := tchB
-            fromL := tchL
-            fromTime := time
-            fromBar := bar_index
-        tchT := ft
-        tchB := fb
-        tchL := array.get(cL, fk)
-    else if not na(tchT)
-        fromT := tchT
-        fromB := tchB
-        fromL := tchL
-        fromTime := time
-        fromBar := bar_index
-        tchT := na
 
 //=============================================================================
 // SELECT + DRAW (last bar only)
@@ -501,7 +462,23 @@ if barstate.islast
                     array.push(up, k)
                 else
                     array.push(dn, k)
-        int dir = na(fromT) ? 0 : close > (fromT + fromB) / 2.0 ? 1 : -1
+        // came from = the listed zone price touched most recently (not counting one it is touching now)
+        int fromK = -1
+        int fromQ = 1000
+        if ns > 0
+            for i = 0 to ns - 1
+                int k = array.get(sel, i)
+                float t = array.get(cT, k)
+                float b = array.get(cB, k)
+                if not (high >= b and low <= t)
+                    for q = 1 to math.min(999, bar_index)
+                        if q >= fromQ
+                            break
+                        if high[q] >= b and low[q] <= t
+                            fromQ := q
+                            fromK := k
+                            break
+        int dir = fromK < 0 ? 0 : close > (array.get(cT, fromK) + array.get(cB, fromK)) / 2.0 ? 1 : -1
         int headK = dir == 1 and array.size(up) > 0 ? array.get(up, 0) : dir == -1 and array.size(dn) > 0 ? array.get(dn, 0) : -1
         // header
         table.cell(panel, 0, 0, "LKZ", text_color = color.white, bgcolor = cHead, text_size = pSz, text_halign = text.align_left)
@@ -543,16 +520,7 @@ if barstate.islast
                 float b = array.get(cB, k)
                 color col = isAbove ? colRes : colSup
                 float dist = isAbove ? math.max(b - close, 0.0) : math.max(close - t, 0.0)
-                bool isOrigin = not na(fromT) and b <= fromT and t >= fromB
-                // last touch since price left the "came from" zone (0 = this candle)
-                int touched = -1
-                if not na(fromBar)
-                    int lb = math.min(bar_index - fromBar - 1, 999)
-                    if lb >= 0
-                        for q = 0 to lb
-                            if high[q] >= b and low[q] <= t
-                                touched := q
-                                break
+                bool isOrigin = k == fromK
                 string st = ""
                 color stBg = cCard
                 color stTx = cText
@@ -564,8 +532,8 @@ if barstate.islast
                     st := "Touching now"
                     stBg := #ff9800
                     stTx := color.black
-                else if touched > 0 or isOrigin
-                    st := "Reached " + f_ago(touched > 0 ? time[touched] : fromTime)
+                else if isOrigin
+                    st := "Reached " + f_ago(time[fromQ])
                     stBg := #434651
                     stTx := color.white
                 else if not na(hAtr) and dist <= apprX * hAtr
