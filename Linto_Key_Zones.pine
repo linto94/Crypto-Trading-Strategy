@@ -20,9 +20,9 @@
 //   5. Select: nearest 2 above + 2 below price in total. 15M zones that overlap a
 //      1H zone are dropped (1H has priority).
 // Info panel (top right, information only): lists the zones above and below price with a
-//   status - Not reached (distance) / Approaching / Inside zone / Reached, back out - and marks
-//   the zone price CAME FROM (the last zone it left, and whether it bounced or passed through)
-//   and the zone it is HEADING TO (the nearest zone in that direction). Tracked on closed candles.
+//   status - Not reached (distance) / Approaching / Touching now / Inside zone / Reached (time ago) -
+//   and marks the zone price CAME FROM (the last zone it left) and the zone it is HEADING TO
+//   (the nearest zone in that direction). Tracked on closed candles.
 // Non-repainting: all timeframe data is taken from closed bars only
 // (request.security with [1] + lookahead_on).
 //
@@ -356,13 +356,11 @@ if nC > 0
 var float tchT = na          // zone being touched now
 var float tchB = na
 var int   tchL = 0
-var int   tchSide = 0        // side price came into it from: 1 = from above, -1 = from below
 var float fromT = na          // "came from" zone
 var float fromB = na
 var int   fromL = 0
 var int   fromTime = na
 var int   fromBar = na
-var string fromHow = ""
 if barstate.isconfirmed and (use1H or use15) and nC > 0
     int   fk = -1
     float fd = 1e20
@@ -376,28 +374,21 @@ if barstate.isconfirmed and (use1H or use15) and nC > 0
         float ft = array.get(cT, fk)
         float fb = array.get(cB, fk)
         bool same = not na(tchT) and fb <= tchT and ft >= tchB
-        if not same
-            if not na(tchT)
-                // moved straight from one zone into the next
-                int ex = (ft + fb) / 2.0 > (tchT + tchB) / 2.0 ? 1 : -1
-                fromT := tchT
-                fromB := tchB
-                fromL := tchL
-                fromTime := time
-                fromBar := bar_index
-                fromHow := ex == tchSide ? "bounced" : "passed through"
-            tchSide := close[1] > (ft + fb) / 2.0 ? 1 : -1
+        if not same and not na(tchT)   // moved straight from one zone into the next
+            fromT := tchT
+            fromB := tchB
+            fromL := tchL
+            fromTime := time
+            fromBar := bar_index
         tchT := ft
         tchB := fb
         tchL := array.get(cL, fk)
     else if not na(tchT)
-        int ex = close > (tchT + tchB) / 2.0 ? 1 : -1
         fromT := tchT
         fromB := tchB
         fromL := tchL
         fromTime := time
         fromBar := bar_index
-        fromHow := ex == tchSide ? "bounced" : "passed through"
         tchT := na
 
 //=============================================================================
@@ -508,7 +499,6 @@ if barstate.islast
                     array.push(dn, k)
         int dir = na(fromT) ? 0 : close > (fromT + fromB) / 2.0 ? 1 : -1
         int headK = dir == 1 and array.size(up) > 0 ? array.get(up, 0) : dir == -1 and array.size(dn) > 0 ? array.get(dn, 0) : -1
-        bool originShown = false
         int  nRows = 2 * perSide + 1
         for r = 0 to nRows - 1
             int  k = -1
@@ -540,8 +530,6 @@ if barstate.islast
                 color col = isAbove ? colRes : colSup
                 float dist = isAbove ? math.max(b - close, 0.0) : math.max(close - t, 0.0)
                 bool isOrigin = not na(fromT) and b <= fromT and t >= fromB
-                if isOrigin
-                    originShown := true
                 // last touch since price left the "came from" zone (0 = this candle)
                 int touched = -1
                 if not na(fromBar)
@@ -554,10 +542,10 @@ if barstate.islast
                 string st = ""
                 if high >= b and low <= t
                     st := close <= t and close >= b ? "Inside zone" : "Touching now"
-                else if isOrigin
-                    st := "Left " + f_ago(fromTime) + " · " + fromHow
                 else if touched > 0
-                    st := "Reached " + f_ago(time[touched]) + ", back out"
+                    st := "Reached " + f_ago(time[touched])
+                else if isOrigin
+                    st := "Reached " + f_ago(fromTime)
                 else if not na(hAtr) and dist <= apprX * hAtr
                     st := "Approaching · " + f_dist(dist)
                 else
@@ -568,12 +556,6 @@ if barstate.islast
                 table.cell(panel, 2, r, f_rng(t, b), text_color = col, text_size = pSz, text_halign = text.align_left)
                 table.cell(panel, 3, r, st, text_color = col, text_size = pSz, text_halign = text.align_left)
                 table.cell(panel, 4, r, mk, text_color = col, text_size = pSz, text_halign = text.align_left)
-        if not na(fromT) and not originShown
-            table.cell(panel, 0, nRows, "From", text_color = color.gray, text_size = pSz, text_halign = text.align_left)
-            table.cell(panel, 1, nRows, fromL == 60 ? "1H" : "15M", text_color = color.gray, text_size = pSz, text_halign = text.align_left)
-            table.cell(panel, 2, nRows, f_rng(fromT, fromB), text_color = color.gray, text_size = pSz, text_halign = text.align_left)
-            table.cell(panel, 3, nRows, "Left " + f_ago(fromTime) + " · " + fromHow, text_color = color.gray, text_size = pSz, text_halign = text.align_left)
-            table.cell(panel, 4, nRows, "◄ came from (no longer listed)", text_color = color.gray, text_size = pSz, text_halign = text.align_left)
 
     // status lines (information only)
     table.clear(status, 0, 0, 0, 3)
